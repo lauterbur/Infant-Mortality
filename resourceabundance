@@ -1,0 +1,300 @@
+require("mice") #multiple imputation
+require("survival") #coxph
+require("car") #boxplot function
+require("MuMIn") #AICc
+require("norm") #pooling
+require("CPE") #discrimanatory power testing
+
+##Multiple imputation of fruit and leaf availability data
+###using data Ben generated- early genera only for consistency, availability == proportion of resource to all trees observed, only years 1992-2010
+FL<-read.csv("/home/user/Dropbox/Fruit and Infant Survival/Fruit and leaf availability.csv",row.names=1)
+impFL<-mice(FL,method=c(rep("pmm",length=ncol(FL))),m=20) # pmm method, 20 times (see Nakagawa and Freckleton 2011)
+
+##list of all imputed data sets
+completeFL<-list()
+for (i in 1:20){
+  completeFL[[i]]<-complete(impFL,action=i)
+}
+
+  infantmonthsfruit<-c(1,2,2,2,2,3,2,2,2,2,2,1,2,2,2,2,2,2,3,2,2,2,5,2,2,3,2,2,3,1,2,3,3,3,2,2,2,2,2,2,1,1,2,2,2,3,1,2,2,2)#vector of birth months (one for each infant, 1=May, 2=June, 3=July, 5=September)
+      #infantmonthsleaves<-infantmonthsfruit+12
+  infantyears<-c(2,2,3,3,3,3,4,5,6,6,6,7,7,7,7,8,8,8,8,9,9,9,9,10,10,10,11,11,11,12,12,12,12,12,13,13,14,14,14,14,16,16,16,16,16,16,18,18,18,19)#vector of birth years (one for each infant, 1=1991, 19=2009)
+  infantdeaths<-c(NA,3,5,NA,NA,8,4,NA,3,3,8,1,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,11,NA,NA,NA,NA,NA,8,3,NA,NA,NA,NA,NA,NA,7,NA,3,NA,5,7,11,NA,10,9,5,3,8,5) #calendar month of death (if died <=9months)
+    relativedeaths1<-infantdeaths-infantmonthsfruit #relative month of death (0 means it died in the same month it was born)
+    ##Replace NAs for infants that didn't die with 9 (for 9th month) to accomodate Coxph
+	for (i in 1:length(relativedeaths1)){
+	  relativedeaths1[i]<-ifelse(is.na(relativedeaths1[i]),9,relativedeaths1[i])
+	}
+    death<-infantdeaths>0
+    death[is.na(death)]<-F #infants that died are coded true, infants that lived past 9 months are coded false   
+  infantids<-seq(1:50)
+
+##data frames for each imputed data set relative to individuals
+parameters<-c("Fruitm6","Fruitm5","Fruitm4","Fruitm3","Fruitm2","Fruitm1","Fruit.birth","Fruitp1","Fruitp2","Fruitp3","Fruitp4","Fruitp5","Fruitp6","Fruitp7","Fruitp8","Fruitp9",
+	      "Leavesm6","Leavesm5","Leavesm4","Leavesm3","Leavesm2","Leavesm1","Leaves.birth","Leavesp1","Leavesp2","Leavesp3","Leavesp4","Leavesp5","Leavesp6","Leavesp7","Leavesp8","Leavesp9")
+resources<-list()
+  for (x in 1:20){
+    infants.df<-data.frame() #make a data frame with infants as rows and parameters as columns
+    FLx<-c(t(completeFL[[x]])) #turns completeFL matrix into a vector by rows
+    infants<-c()
+      for (i in 1:length(infantids)){
+	infants<-c(FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-18], #gives fruit availability for month relative to birth (birth=0) (see parameters list for order of relative months)
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-17],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-16],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-15],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-14],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-13],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+1],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+2],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+3],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+4],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+5],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+6],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+7],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+8],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+9],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-6],#gives leaf availability for month relative to birth (birth=0)
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-5],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-4],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-3],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-2],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]-1],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+12],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+13],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+14],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+15],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+16],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+17],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+18],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+19],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+20],
+	FLx[(infantyears[i]-1)*24+infantmonthsfruit[i]+21])
+	infants.df<-rbind(infants.df,infants)
+	print(paste(i))
+	}
+      colnames(infants.df)<-parameters
+      infants.df<-cbind(infantids,death,infants.df)
+    resources[[x]]<-infants.df
+    print(paste(x))
+	}
+	
+##Take geometric mean of months comprising formative periods
+geom.mean<-function(x){
+exp(mean(log(x))) #geometric mean, watch out for INFs
+}
+
+##Time-dependent variables
+  deathperiod<-c() #1 for death during early lactation, 2 for mid lactation, 3 for late lactation and weaning
+  for(i in 1:length(relativedeaths1)){
+    if (is.na(relativedeaths1[i])){
+         deathperiod[i]<-NA
+    }
+    else{
+    if(relativedeaths1[i]==0 |relativedeaths1[i]==1){
+      deathperiod[i]<-1
+    }
+    if(relativedeaths1[i]==2|relativedeaths1[i]==3){
+      deathperiod[i]<-2
+    }
+    if(relativedeaths1[i]==4|relativedeaths1[i]==5|relativedeaths1[i]==6|relativedeaths1[i]==7|relativedeaths1[i]==8){
+      deathperiod[i]<-3
+    }
+    }
+    }
+formativeparameters<-c("egfruit","egleaves","lgfruit","lgleaves","elfruit","elleaves","mlfruit","mlleaves","wllfruit","wllleaves","instantfruit","instantleaves","previousfruit","previousleaves")
+formative<-list()
+for (x in 1:20){
+    infants.df<-data.frame() #make a data frame with infants as rows and parameters as columns
+    instantfruit<-c()
+    instantleaves<-c()
+      ###Early gestation - 3 months
+      egfruit<-sapply(c(na.omit(resources[[x]]$Fruitm6,resources[[x]]$Fruitm5,resources[[x]]$Fruitm4)),geom.mean)
+      egleaves<-sapply(c(na.omit(resources[[x]]$Leavesm6,resources[[x]]$Leavesm5,resources[[x]]$Leavesm4)),geom.mean)
+      ###Late gestation - 3 months - ends with last month before birth month
+      lgfruit<-sapply(c(na.omit(resources[[x]]$Fruitm3,resources[[x]]$Fruitm2,resources[[x]]$Fruitm1)),geom.mean)
+      lgleaves<-sapply(c(na.omit(resources[[x]]$Leavesm3,resources[[x]]$Leavesm2,resources[[x]]$Leavesm1)),geom.mean)
+      ###Early lactation - 3 months - includes birth month
+      elfruit<-sapply(c(na.omit(resources[[x]]$Fruit.birth,resources[[x]]$Fruitp1,resources[[x]]$Fruitp2)),geom.mean)
+      elleaves<-sapply(c(na.omit(resources[[x]]$Leaves.birth,resources[[x]]$Leavesp1,resources[[x]]$Leavesp2)),geom.mean)
+      ##Mid lactation - 3 months
+      mlfruit<-sapply(c(na.omit(resources[[x]]$Fruitp3,resources[[x]]$Fruitp4,resources[[x]]$Fruitp5)),geom.mean)
+      mlleaves<-sapply(c(na.omit(resources[[x]]$Leavesp3,resources[[x]]$Leavesp4,resources[[x]]$Leavesp5)),geom.mean)
+      ###Late lactation and weaning - 3 months
+      wllfruit<-sapply(c(na.omit(resources[[x]]$Fruitp6,resources[[x]]$Fruitp7,resources[[x]]$Fruitp8)),geom.mean)
+      wllleaves<-sapply(c(na.omit(resources[[x]]$Leavesp6,resources[[x]]$Leavesp7,resources[[x]]$Leavesp8)),geom.mean)
+      ##
+      infants.df<-cbind(egfruit,egleaves,lgfruit,lgleaves,elfruit,elleaves,mlfruit,mlleaves,wllfruit,wllleaves,instantfruit,instantleaves)
+      infants.df<-cbind(infantids,death,deathperiod,infants.df)
+      formative[[x]]<-infants.df
+      }
+      
+###Replace NAs for infants that didn't die with 3 (for 3rd formative period) to accomodate Coxph
+for (x in 1:20){
+  for (i in 1:length(infantids)){
+  formative[[x]][i,3]<-ifelse(is.na(formative[[x]][i,3]),3,formative[[x]][i,3])
+}
+}
+
+###Time dependent variables - mlfruit, mlleaves,llfruit,llleaves,wfruit,wleaves,instantfruit,instantleaves,previousfruit,previousleaves
+formative6<-formative
+for(x in 1:20)  {
+  start<-c()
+  stop<-c()
+    formative6[[x]] <- matrix(0, 337, 18) # to hold new data set 
+    colnames(formative6[[x]]) <- c("timedepid","start", "stop", "deathtime","egfruit","egleaves","lgfruit","lgleaves","elfruit","elleaves","mlfruit","mlleaves","wllfruit","wllleaves","instantfruit","instantleaves","previousfruit","previousleaves")
+    row<-0 #set counter to 0
+    for(i in 1:nrow(formative[[x]])){#loop over individuals
+      for (j in 1:9){#loop over formative periods
+           if (j-1>=relativedeaths1[i] && formative[[x]][i, 2] ==1) next
+          start<-j #start of period
+	  stop <- start+1 # stop time (current formative period)
+      row<-row+1 #add to row counter
+      timedepid<-paste(i,j,sep=".") 
+      deathtime <- if (start == relativedeaths1[i] && formative[[x]][i, 2] ==1) 1 else 0
+      mlfruit<- if (start >=3)  formative[[x]][i,10] else 0
+      mlleaves<-if (start >=3)  formative[[x]][i,11] else 0
+      wllfruit<-if(start>=5) formative[[x]][i,12] else 0 
+      wllleaves<-if (start>=5) formative[[x]][i,13] else 0
+      instantfruit<-resources[[x]][i,j+8]
+      instantleaves<-resources[[x]][i,j+24]
+      previousfruit<-resources[[x]][i,j+7]
+      previousleaves<-resources[[x]][i,j+23]
+      formative6[[x]][row,] <- c(timedepid,start, stop, deathtime, unlist(formative[[x]][i, c(4:9)]),mlfruit,mlleaves,wllfruit,wllleaves,instantfruit,instantleaves,previousfruit,previousleaves) #constructing row record
+    }
+    }
+    }
+
+##VIF
+model<-lm(as.numeric(formative6[[x]][,2])~as.numeric(formative6[[x]][,5])+as.numeric(formative6[[x]][,6])+as.numeric(formative6[[x]][,7])+as.numeric(formative6[[x]][,8])+as.numeric(formative6[[x]][,9])+as.numeric(formative6[[x]][,10])+as.numeric(formative6[[x]][,11])+as.numeric(formative6[[x]][,12])+as.numeric(formative6[[x]][,13])+as.numeric(formative6[[x]][,14])+as.numeric(formative6[[x]][,15])+as.numeric(formative6[[x]][,16])+as.numeric(formative6[[x]][,17])+as.numeric(formative6[[x]][,18]))
+vif(model)    
+
+##CoxPH
+cox<-list()
+for(x in 1:20){
+cox[[x]]<- coxph(Surv(as.numeric(formative6[[x]][,2]), as.numeric(formative6[[x]][,3]), as.numeric(formative6[[x]][,4])) ~as.numeric(formative6[[x]][,5])+as.numeric(formative6[[x]][,6])+as.numeric(formative6[[x]][,7])+as.numeric(formative6[[x]][,8])+as.numeric(formative6[[x]][,9])+as.numeric(formative6[[x]][,10])+as.numeric(formative6[[x]][,11])+as.numeric(formative6[[x]][,12])+as.numeric(formative6[[x]][,13])+as.numeric(formative6[[x]][,14])+as.numeric(formative6[[x]][,15])+as.numeric(formative6[[x]][,16])+as.numeric(formative6[[x]][,17])+as.numeric(formative6[[x]][,18]),singular.ok=F,toler.chol= 1e-10,iter.max=100)
+}
+
+##testing proportional hazards assumption
+ph<-list()
+for(x in 1:20){
+ph[[x]]<-cox.zph(cox[[x]])
+plot(ph[[x]])
+}
+
+##testing discrimanatory power
+cpe<-list()
+for(x in 1:20){
+cpe[[x]]<-phcpe(cox[[x]])
+}
+cpe
+mean(unlist(cpe))
+
+##All possible models
+IC<-list()
+for(x in 1:20){
+  IC[[x]]<-dredge(cox[[x]],rank="AICc",subset=!(`as.numeric(formative6[[x]][, 16])`&&`as.numeric(formative6[[x]][, 18])`) && !(`as.numeric(formative6[[x]][, 15])`&&`as.numeric(formative6[[x]][, 17])`) && xor(`as.numeric(formative6[[x]][, 15])`,`as.numeric(formative6[[x]][, 18])`) && xor(`as.numeric(formative6[[x]][, 16])`,`as.numeric(formative6[[x]][, 17])`)) #can't use QAIC because overdispersion parameter (chat) can't be calculated, this isn't a Poisson model
+}
+
+
+##Model averaging
+AVG<-list()
+for(x in 1:20){
+  AVG[[x]]<-summary(model.avg(IC[[x]],subset=delta<2))
+}
+
+##Pool all imputations
+    #reorder each vector of coefficients to be in the order of the first
+      coef1 <-AVG[[1]]$coefmat[,1]
+      coef2<-AVG[[2]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef3<-AVG[[3]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef4<-AVG[[4]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef5<-AVG[[5]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef6<-AVG[[6]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef7<-AVG[[7]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef8<-AVG[[8]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef9<-AVG[[9]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef10<-AVG[[10]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef11<-AVG[[11]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef12<-AVG[[12]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef13<-AVG[[13]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef14<-AVG[[14]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef15<-AVG[[15]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef16<-AVG[[16]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef17<-AVG[[17]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef18<-AVG[[18]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef19<-AVG[[19]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+      coef20<-AVG[[20]]$coefmat[,1][names(AVG[[1]]$coefmat[,1])]
+estcoefs<-list(coef1,coef2,coef3,coef4,coef5,coef6,coef7,coef8,coef9,coef10,coef11,coef12,coef13,coef14,coef15,coef16,coef17,coef18,coef19,coef20)
+      sterr1<-AVG[[1]]$coefmat[,2]
+      sterr2<-AVG[[2]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr3<-AVG[[3]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr4<-AVG[[4]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr5<-AVG[[5]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr6<-AVG[[6]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr7<-AVG[[7]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr8<-AVG[[8]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr9<-AVG[[9]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr10<-AVG[[10]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr11<-AVG[[11]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr12<-AVG[[12]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr13<-AVG[[13]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr14<-AVG[[14]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr15<-AVG[[15]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr16<-AVG[[16]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr17<-AVG[[17]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr18<-AVG[[18]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr19<-AVG[[19]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+      sterr20<-AVG[[20]]$coefmat[,2][names(AVG[[1]]$coefmat[,2])]
+eststderr<-list(sterr1,sterr2,sterr3,sterr4,sterr5,sterr6,sterr7,sterr8,sterr9,sterr10,sterr11,sterr12,sterr13,sterr14,sterr15,sterr16,sterr17,sterr18,sterr19,sterr20)
+pooled<-mi.inference(estcoefs,eststderr,confidence=0.95)
+
+##Plotting
+egfruitavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"egfruit"])))
+egleavesavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"egleaves"])))
+lgfruitavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"lgfruit"])))
+lgleavesavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"lgleaves"])))
+elfruitavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"elfruit"])))
+elleavesavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"elleaves"])))
+mlfruitavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"mlfruit"])))
+mlleavesavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"mlleaves"])))
+wllfruitavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"wllfruit"])))
+wllleavesavg<-rowMeans(sapply(formative, function(x) as.numeric(x[,"wllleaves"])))
+fruitavgmatrix<-data.frame("EG"=egfruitavg,"LG"=lgfruitavg,"EL"=elfruitavg,"ML"=mlfruitavg,"LLW"=wllfruitavg)
+leavesavgmatrix<-data.frame("EG"=egleavesavg,"LG"=lgleavesavg,"EL"=elleavesavg,"ML"=mlleavesavg,"LLW"=wllleavesavg)
+
+pdf(file="boxplot.pdf")
+split.screen(c(2,1))
+screen(1)
+boxplot(fruitavgmatrix,show.names=T,main="Fruit abundance during each formative period",xlab="Formative periods",ylab="Proportion of trees with fruit",notch=T,notch.frac=.7,las=2)
+screen(2)
+boxplot(leavesavgmatrix,main="Leaf abundance during each formative period",xlab="Formative periods",ylab="Proportion of trees with non-mature leaves",notch=T,notch.frac=.7)
+close.screen()
+dev.off()
+
+##ANOVA of fruit and leaf abundances
+fruit.df<-data.frame(fruit=c(t(formative[[1]][,c(-1:-3,-5,-7,-9,-11,-13)])), period=factor(rep(c("eg","lg","el","ml","wll"),50)))
+fruit.aov<-aov(fruit~period,data=fruit.df)
+summary(fruit.aov)
+leaves.df<-data.frame(leaves=c(t(formative[[1]][,c(-1:-3,-4,-6,-8,-10,-12)])), period=factor(rep(c("eg","lg","el","ml","wll"),50)))
+leaves.aov<-aov(leaves~period,data=leaves.df)
+summary(leaves.aov)
+
+##Saving and reloading
+for(x in 1:20){
+  write.table(AVG[[x]]$summary,file=paste("finalmodel",x,".txt",sep=""))
+}
+for(x in 1:20){
+  write.table(AVG[[x]]$term.codes,file=paste("finalmodelcodes",x,".txt",sep=""))
+}
+
+write.table(pooled, file="finalmodelaveraging.txt")
+save(AVG,pooled,file="finalmodelaverages.rdata")
+save.image(file="finalresources.rdata")
+
+local({
+  load("finalmodelaverages.rdata")
+  ls()
+})
+load("finalmodelaverages.rdata",.GlobalEnv)
+load("finalresources.rdata",.GlobalEnv)
